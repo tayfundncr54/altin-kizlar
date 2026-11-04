@@ -1570,7 +1570,7 @@ function addrFields(d){
  '<label class="f">Sokak / cadde<input class="inp" id="f-street" data-draft="street" value="'+esc(d.street)+'"></label>'+
  '<div class="grid2"><label class="f">Bina no<input class="inp" id="f-bina" inputmode="numeric" data-draft="bina" value="'+esc(d.bina)+'"></label><label class="f">Daire no<input class="inp" id="f-daire" inputmode="numeric" data-draft="daire" value="'+esc(d.daire)+'"></label></div>'+
  '<div style="display:grid;gap:8px"><b style="font-size:14px">Evinizin yeri</b><span class="muted" style="font-size:13px">Haritada binanızın üstüne dokunun. Personelimiz kapınızı bu işaretle bulur.</span>'+
- '<button type="button" class="btn ghost small" data-act="geo" style="justify-self:start">Konumumu kullan</button>'+
+ '<div class="row" style="gap:8px"><button type="button" class="btn ghost small" data-act="geo">📍 Konumumu kullan</button>'+(window.L?'<button type="button" class="btn ghost small" data-act="addr-find">🔎 Yazdığım adresi haritada bul</button>':'')+'</div><span class="muted" id="addr-find-msg" style="font-size:13px"></span>'+
  (window.L?'<div id="lpick" class="lpick"></div>':'<div class="mapbox" data-act="pick">'+mapSVG({id:"pick-map",pin:pin,box:z?zoomBox(z,150):null,small:!!z,label:"Konum seçme haritası"})+'</div>')+
  '<span class="muted" id="pin-ok" style="font-size:13px"'+(pin?'':' hidden')+'>İşaret kondu ✓ Gerekirse tekrar dokunarak veya iğneyi sürükleyerek düzeltin.</span></div>'+
  '<label class="f">Adres tarifi <span class="h">İsteğe bağlı. Örnek: mavi kapı, market yanı</span><input class="inp" id="f-tarif" data-draft="tarif" value="'+esc(d.tarif)+'"></label>';
@@ -2593,11 +2593,12 @@ function posFromText(t){t=String(t||"").trim();if(!t)return null;var m=t.match(/
  m=t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);if(m)return{lat:+m[1],lng:+m[2]};
  var c=rtCoordFrom(t);if(c)return c;if(/goo\.gl|maps\.app|\/maps\/-\/|yandex\.[a-z.]+\/-\//i.test(t))return "short";return null}
 function addrSearch(addr){var q=encodeURIComponent(addr);return navApp()==="google"?"https://www.google.com/maps/search/?api=1&query="+q:navApp()==="apple"?"https://maps.apple.com/?q="+q:"https://yandex.com.tr/maps/?text="+q}
-function setCustPos(c,pos){c.lat=pos.lat;c.lng=pos.lng;c.noPos=false;c.geoApprox=null;S.orders.forEach(function(o){if(o.cid===c.id&&o.status==="bekliyor"){o.lat=pos.lat;o.lng=pos.lng}})}
-function posBox(){var L=S.customers.filter(function(c){return needsPos(c)});if(!L.length)return "";var nNo=L.filter(function(c){return c.noPos}).length;var q=rtNorm(S.draft.possearch||""),zf=S.draft.poszone||"";
+function setCustPos(c,pos,manual){c.lat=pos.lat;c.lng=pos.lng;c.noPos=false;c.geoApprox=null;if(manual){c.posManual=true;c.geoLv="elle";c.geoSrc=""}S.orders.forEach(function(o){if(o.cid===c.id&&o.status==="bekliyor"){o.lat=pos.lat;o.lng=pos.lng}})}
+function geoBar(n){var auto=S.customers.filter(function(c){return c.street&&!c.posManual}).length;return '<div class="geobar"><div><b>Adreslerden otomatik bul</b><span class="note">Sokak ve kapı numarası haritada aranır; sistem bulduğu sokağın adını kontrol eder, benzemiyorsa kabul etmez. Kapı numarası haritada kayıtlıysa tam kapıya, değilse sokağa, sokak da yoksa mahallenin ortasına (yaklaşık) konur.</span></div><span id="geo-prog" class="note">'+(GEO.run?'Aranıyor…':'')+'</span>'+(GEO.run?'<button class="btn small" data-act="geo-run">Durdur</button>':'<div class="row" style="gap:6px">'+(n?'<button class="btn small" data-act="geo-run">▶ '+n+' kişiyi bul</button>':'')+(auto?'<button class="btn ghost small" data-act="geo-run" data-id="tekrar">↻ Otomatik bulunanların hepsini yeniden kontrol et ('+auto+')</button>':'')+'</div>')+'</div>'}
+function posBox(){var L=S.customers.filter(function(c){return needsPos(c)});if(!L.length)return S.customers.some(function(c){return c.street&&!c.posManual})?'<div class="box posbox">'+geoBar(0)+'</div>':"";var nNo=L.filter(function(c){return c.noPos}).length;var q=rtNorm(S.draft.possearch||""),zf=S.draft.poszone||"";
  var F=L.filter(function(c){return (!zf||c.zone===zf)&&(!q||rtNorm(c.name+" "+(c.street||"")).indexOf(q)>=0)}),zs={};L.forEach(function(c){zs[c.zone]=(zs[c.zone]||0)+1});
  var h='<div class="box posbox"><div class="row" style="justify-content:space-between"><h2>📍 Konumu eksik olanlar <span class="chip c-warn">'+L.length+' kişi</span></h2></div>'+
-  (nNo?'<div class="geobar"><div><b>Adreslerden otomatik bul</b><span class="note">Routin\'deki adreslerden konumlar haritada aranır. Sokak bulunamazsa mahallenin ortasına konur (yaklaşık); onları sonra haritada düzeltirsiniz. Saniyede bir adres aranır.</span></div><span id="geo-prog" class="note">'+(GEO.run?'Aranıyor…':'')+'</span><button class="btn small" data-act="geo-run">'+(GEO.run?'Durdur':'▶ '+nNo+' kişinin konumunu bul')+'</button></div>':'')+
+  geoBar(L.length)+
   '<details class="poshelp"><summary>Konum nasıl eklenir? (bir kez okuyun)</summary><ol><li>Önce üstteki <b>"konumunu bul"</b> düğmesiyle adreslerden otomatik bulmayı çalıştırın.</li><li>Kalanlar için satırdaki <b>"📍 Haritada işaretle"</b>ye basın; açılan haritada evin üstüne dokunun ve <b>Kaydet</b> deyin.</li><li>İsterseniz Yandex/Google bağlantısı veya koordinat da yapıştırabilirsiniz.</li></ol><p class="note">Kişi size WhatsApp\'tan konum attıysa o bağlantıyı da yapıştırabilirsiniz. Kısa bağlantılar (goo.gl gibi) okunamaz; o durumda koordinatları kopyalayın. Ayrıca dağıtıcı kapıda "Konumu buraya kaydet"e basınca da kaydedilir.</p></details>'+
   '<div class="row" style="gap:10px"><label class="dsearch"><span aria-hidden="true">🔍</span><input class="inp" id="pos-search" type="search" placeholder="İsim veya adres ara" value="'+esc(S.draft.possearch||"")+'" autocomplete="off"></label><select class="inp" style="max-width:260px" data-draft="poszone" data-rerender="admin"><option value="">Tüm bölgeler</option>'+Object.keys(zs).sort().map(function(z){return '<option value="'+esc(z)+'"'+(z===zf?' selected':'')+'>'+esc(z)+' · '+zs[z]+'</option>'}).join("")+'</select></div>';
  if(!F.length)return h+'<p class="note" style="margin:0">Eşleşen kişi yok.</p></div>';
@@ -2670,8 +2671,8 @@ function processWeb(doc){var w=doc.data(),ref=DB.doc("weborders/"+doc.id),st0=w.
  firebase.firestore().runTransaction(function(tx){return tx.get(ref).then(function(s2){if(!s2.exists||s2.data().status!==st0)throw "taken";tx.update(ref,{status:claim})})}).then(function(){
   if(st0==="iptal-istek"){var o0=byId(w.oid);if(o0&&o0.status==="bekliyor"){cancelOrder(o0,"admin")}ref.update({status:"iptal"});save();softRender();toast(w.name+" siparişini iptal etti.");return}
   var c=(w.cid&&S.customers.filter(function(x){return x.id===w.cid})[0])||findCustByPhone(w.phone),A=w.addr;
-  if(!c){c={id:"c"+uid(),name:w.name||"İsimsiz",phone:w.phone,zone:(A&&A.zone)||"",mahalle:(A&&A.mahalle)||"",street:(A&&A.street)||"",bina:(A&&A.bina)||"",daire:(A&&A.daire)||"",tarif:(A&&A.tarif)||"",note:w.note||"",lat:A&&A.lat?A.lat:null,lng:A&&A.lng?A.lng:null,noPos:!(A&&A.lat),member:false,lastDaysAgo:0,web:true};S.customers.push(c)}
-  else if(A&&w.saveAddr){c.changed={at:Date.now(),seen:false,old:{zone:c.zone,street:c.street,bina:c.bina,daire:c.daire,mahalle:c.mahalle||"",lat:c.lat,lng:c.lng}};["zone","mahalle","street","bina","daire","tarif"].forEach(function(k){if(A[k])c[k]=A[k]});if(A.lat){c.lat=A.lat;c.lng=A.lng;c.noPos=false;c.geoApprox=null}}
+  if(!c){c={id:"c"+uid(),name:w.name||"İsimsiz",phone:w.phone,zone:(A&&A.zone)||"",mahalle:(A&&A.mahalle)||"",street:(A&&A.street)||"",bina:(A&&A.bina)||"",daire:(A&&A.daire)||"",tarif:(A&&A.tarif)||"",note:w.note||"",lat:A&&A.lat?A.lat:null,lng:A&&A.lng?A.lng:null,noPos:!(A&&A.lat),posManual:!!(A&&A.lat),member:false,lastDaysAgo:0,web:true};S.customers.push(c)}
+  else if(A&&w.saveAddr){c.changed={at:Date.now(),seen:false,old:{zone:c.zone,street:c.street,bina:c.bina,daire:c.daire,mahalle:c.mahalle||"",lat:c.lat,lng:c.lng}};["zone","mahalle","street","bina","daire","tarif"].forEach(function(k){if(A[k])c[k]=A[k]});if(A.lat){setCustPos(c,{lat:A.lat,lng:A.lng},true)}}
   c.lastDaysAgo=0;var base=(A&&!w.saveAddr)?Object.assign({},c,A,{id:c.id}):c;
   var o=addOrder(S,base,Object.assign({},w.items),w.pay==="havale"?"havale":"kapida",w.abs,{discount:w.discount||0,min:S.demo.min});o.paid=false;o.web=doc.id;o.webSt="";if(w.note)o.note=w.note;applyStock(S,o.items,-1);
   ref.update({status:"alindi",no:o.no,oid:o.id});save();softRender();toast("Yeni web siparişi: "+o.name+" · "+dayLabel(o.abs))},function(){})}
@@ -2690,16 +2691,45 @@ var OSM="https://tile.openstreetmap.org/{z}/{x}/{y}.png",OSM_ATT='&copy; <a href
 function tiles(m){L.tileLayer(OSM,{maxZoom:19,attribution:OSM_ATT}).addTo(m)}
 var GEO={run:false,cache:{}};
 function geoClean(a){return String(a||"").replace(/,?\s*T(ü|u)rkiye\s*$/i,"").replace(/,\s*\d{5}\b/g,"").replace(/\s+/g," ").trim()}
-function geoQuery(q){return fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tr&accept-language=tr&viewbox=29.90,41.15,31.00,40.50&bounded=1&q="+encodeURIComponent(q)).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})}
+function geoQuery(q,lim){return fetch("https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit="+(lim||1)+"&countrycodes=tr&accept-language=tr&viewbox=29.90,41.15,31.00,40.50&bounded=1&q="+encodeURIComponent(q)).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
 function geoProg(t){var el=document.getElementById("geo-prog");if(el)el.textContent=t}
-function geoRun(){if(GEO.run){GEO.run=false;softRender();return}GEO.run=true;softRender();var list=S.customers.filter(function(c){return c.noPos&&c.street}),i=0,okS=0,okM=0,fail=0;
- (function next(){if(!GEO.run||i>=list.length){GEO.run=false;save();softRender();toast("Bitti: "+okS+" sokak düzeyinde, "+okM+" mahalle düzeyinde bulundu"+(fail?", "+fail+" bulunamadı":"")+".");return}
-  var c=list[i++],addr=geoClean(c.street),parts=addr.split(",").map(function(x){return x.trim()}),mah=c.mahalle||mahOf(c.street),ilce=parts.length>=3?parts[parts.length-2]:"",mk="m|"+mahKey(mah)+"|"+ilce;
-  geoProg((i)+" / "+list.length+" · "+c.name);
-  var hasStreet=parts.length>3&&!/mahalle/i.test(parts[0]);
-  (hasStreet?geoQuery(addr).then(function(j){return j[0]?{lat:+j[0].lat,lng:+j[0].lon,lv:"sokak"}:null}):Promise.resolve(null)).then(function(r){if(r)return r;if(!mah)return null;if(GEO.cache[mk]!==undefined)return GEO.cache[mk];return sleep(hasStreet?1100:0).then(function(){return geoQuery(mah+" Mahallesi, "+(ilce||"Adapazarı")+", Sakarya")}).then(function(j){var v=j[0]?{lat:+j[0].lat,lng:+j[0].lon,lv:"mahalle"}:null;GEO.cache[mk]=v;return v})})
-  .then(function(r){if(r){setCustPos(c,{lat:r.lat,lng:r.lng});if(r.lv==="mahalle"){c.geoApprox="mahalle";okM++}else okS++}else fail++;if(i%10===0)save()},function(){fail++})
+/* adres parçaları: sokak, kapı no, mahalle, ilçe */
+function roadKey(r){var t=rtNorm(r||"").replace(/[.,:;'"()]/g," ").replace(/\b(sokagi|sokak|sok|sk|caddesi|cadde|cad|cd|bulvari|bulvar|blv|nolu|no|yolu|kume evleri|evleri|meydani)\b/g," ").replace(/\s+/g," ").trim();var n=t.match(/^\d+$/);return n?"#"+n[0]:t}
+function roadSame(a,b){var x=roadKey(a),y=roadKey(b);if(!x||!y)return false;if(x.charAt(0)==="#"||y.charAt(0)==="#")return x===y;return x===y||(x.length>=5&&y.length>=5&&(x.indexOf(y)===0||y.indexOf(x)===0))}
+function mahSame(a,b){var k=function(m){return mahKey(String(m||"").replace(/\bmah(allesi|\.)?\b/ig,""))};return !!a&&!!b&&k(a)===k(b)}
+function addrParts(c){var addr=geoClean(c.street),parts=addr.split(",").map(function(x){return x.trim()}).filter(Boolean),mh=c.mahalle||mahOf(c.street)||"",ilce="",road="";
+ var si=-1;parts.forEach(function(x,k){if(/^sakarya$/i.test(x))si=k});if(si>0)ilce=parts[si-1];if(/mahalle/i.test(ilce))ilce="";
+ var r0=parts[0]||"";if(r0&&!/mahalle/i.test(r0)&&parts.length>1&&rtNorm(r0)!==rtNorm(ilce))road=r0;else if(parts.length===1&&!/mahalle/i.test(r0))road=r0;
+ var no=String(c.bina||"").match(/\d+/);no=no?no[0]:"";if(!no){var m=String(c.note||"").match(/\bno\s*[:.]?\s*(\d{1,4})\b/i);if(m)no=m[1]}
+ if(!no){var m2=road.match(/^(.*\D)\s+(\d{1,4})$/);if(m2&&!/sokak|cadde|bulvar/i.test(m2[2])&&/[a-zçğıöşü]/i.test(m2[1])&&/(sokak|cadde|caddesi|bulvar|sk|cd)\s*$/i.test(m2[1])){road=m2[1].trim();no=m2[2]}}
+ return {road:road,no:no,mah:mh,ilce:ilce}}
+function adrOf(x){var a=x.address||{};return {road:a.road||a.pedestrian||a.footway||a.residential||"",mah:a.suburb||a.quarter||a.neighbourhood||a.village||a.hamlet||"",no:a.house_number||"",ilce:a.town||a.city_district||a.county||a.city||""}}
+function kmD(a,b,c,d){var R=6371,x=(c-a)*Math.PI/180,y=(d-b)*Math.PI/180,h=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(y/2)*Math.sin(y/2);return 2*R*Math.asin(Math.sqrt(h))}
+function geoOk(x,P,cen,numbered){var a=adrOf(x);if(mahSame(a.mah,P.mah))return 3;var d=cen?kmD(cen.lat,cen.lng,+x.lat,+x.lon):null;if(d!=null&&d<1.5)return 2;var il=!P.ilce||rtNorm(a.ilce).indexOf(rtNorm(P.ilce))>=0;if(numbered&&il&&(d==null||d<5))return 1;if(!P.mah&&il)return 1;return 0}
+function pickRoad(j,P,cen){var best=null,num=roadKey(P.road).charAt(0)==="#";j.forEach(function(x){if(!roadSame(adrOf(x).road,P.road))return;var sc=geoOk(x,P,cen,num);if(sc>0&&(!best||sc>best.sc))best={sc:sc,x:x}});return best?{lat:+best.x.lat,lng:+best.x.lon,lv:"sokak"}:null}
+function roadVariants(r){var n=String(r).match(/^(\d{1,5})\.?\s*(nolu\s*)?(sokak|sk\.?|sokağı)$/i);if(n)return [n[1]+". Sokak",n[1]+" Nolu Sokak"];var c=String(r).match(/^(\d{1,5})\.?\s*(caddesi|cadde|cd\.?)$/i);if(c)return [c[1]+". Cadde",c[1]+" Nolu Cadde"];return [r]}
+function isPoi(r){return !!r&&!/(sokak|sokağı|sok\.?$|cadde|caddesi|bulvar|yolu|\bsk\b|\bcd\b|küme evleri|meydan)/i.test(r)&&!/^\d+$/.test(r)}
+function pickPoi(j,P,cen){var h=null;j.forEach(function(x){if(h)return;if(!roadSame(x.name||"",P.road))return;if(geoOk(x,P,cen,false)>=2)h={lat:+x.lat,lng:+x.lon,lv:"kapi"}});return h}
+function mahCenter(P){var mk="m|"+mahKey(P.mah)+"|"+P.ilce;if(!P.mah)return Promise.resolve(null);if(GEO.cache[mk]!==undefined)return Promise.resolve(GEO.cache[mk]);
+ return geoQuery(P.mah.replace(/\s*mahallesi$/i,"")+" Mahallesi, "+(P.ilce?P.ilce+", ":"")+"Sakarya",3).then(function(j){var v=null;j.forEach(function(x){if(!v)v={lat:+x.lat,lng:+x.lon,lv:"mahalle",q:1}});GEO.cache[mk]=v;return v})}
+function geoFind(P){var where=(P.mah?P.mah.replace(/\s*mahallesi$/i,"")+" Mahallesi, ":"")+(P.ilce?P.ilce+", ":"")+"Sakarya",ck="r|"+roadKey(P.road)+"|"+mahKey(P.mah)+"|"+P.ilce,cen=null,asked=false;
+ function q(t,l){var w=asked?sleep(1100):Promise.resolve();asked=true;return w.then(function(){return geoQuery(t,l)})}
+ var mk="m|"+mahKey(P.mah)+"|"+P.ilce,had=GEO.cache[mk]!==undefined;
+ return mahCenter(P).then(function(c){cen=c;if(P.mah&&!had)asked=true;
+  var steps=[];
+  if(P.road&&P.no)steps.push(function(){return q(roadVariants(P.road)[0]+" "+P.no+", "+where,3).then(function(j){var h=null;j.forEach(function(x){var a=adrOf(x);if(!h&&a.no&&a.no.replace(/\D/g,"")===P.no&&roadSame(a.road,P.road)&&geoOk(x,P,cen,true)>0)h={lat:+x.lat,lng:+x.lon,lv:"kapi"}});return h})});
+  if(P.road&&isPoi(P.road))steps.push(function(){return q(P.road+", "+where,5).then(function(j){return pickPoi(j,P,cen)||pickRoad(j,P,cen)})});
+  else if(P.road){if(GEO.cache[ck]!==undefined)steps.push(function(){return Promise.resolve(GEO.cache[ck])});else{var V=roadVariants(P.road);V.forEach(function(v,k){steps.push(function(){return q(v+", "+where,5).then(function(j){var r=pickRoad(j,P,cen);if(r||k===V.length-1)GEO.cache[ck]=r;return r})})})}}
+  var k=0;return (function nx(){if(k>=steps.length)return cen?{lat:cen.lat,lng:cen.lng,lv:"mahalle"}:null;return steps[k++]().then(function(r){return r||nx()})})()})}
+function geoRun(mode){if(GEO.run){GEO.run=false;softRender();return}
+ var list=S.customers.filter(function(c){return c.street&&(mode==="tekrar"?!c.posManual:c.noPos||c.geoApprox==="mahalle")});
+ if(!list.length){toast("Aranacak kimse yok.");return}
+ if(mode==="tekrar"&&!confirm(list.length+" kişinin konumu adresinden yeniden aranacak (yaklaşık "+Math.ceil(list.length*2.5/60)+" dakika).\n\nBugünden sonra haritada elle işaretlediğiniz kişilere dokunulmaz. Daha önce elle işaretlediğiniz kişiler varsa onlar da yeniden aranır.\n\nDevam edilsin mi?"))return;
+ GEO.run=true;softRender();var i=0,okK=0,okS=0,okM=0,fail=0;
+ (function next(){if(!GEO.run||i>=list.length){GEO.run=false;save();softRender();toast("Bitti: "+(okK?okK+" kapı numarasıyla, ":"")+okS+" sokak düzeyinde, "+okM+" mahalle düzeyinde (yaklaşık) bulundu"+(fail?", "+fail+" bulunamadı":"")+".");return}
+  var c=list[i++],P=addrParts(c);geoProg(i+" / "+list.length+" · "+c.name);
+  geoFind(P).then(function(r){if(r){setCustPos(c,{lat:r.lat,lng:r.lng});c.geoLv=r.lv;c.geoSrc="oto";if(r.lv==="mahalle"){c.geoApprox="mahalle";okM++}else if(r.lv==="kapi")okK++;else okS++}else fail++;if(i%10===0)save()},function(){fail++})
   .then(function(){return sleep(1100)}).then(next)})()}
 /* konum işaretleme penceresi */
 var PIN=null;
@@ -2712,8 +2742,8 @@ function openPin(cid){var c=S.customers.filter(function(x){return x.id===cid})[0
 function closePin(){if(PIN){try{PIN.m.remove()}catch(e){}PIN.w.remove();PIN=null}}
 document.addEventListener("click",function(e){var b=e.target.closest("[data-pin]");if(!b||!PIN)return;var a=b.dataset.pin,msg=document.getElementById("pin-msg");
  if(a==="close")closePin();
- else if(a==="save"){var ll=PIN.get();if(!ll){msg.textContent="Önce haritada bir yere dokunun.";return}setCustPos(PIN.c,{lat:ll.lat,lng:ll.lng});var nm=PIN.c.name;closePin();save();softRender();toast(nm+": konum kaydedildi.")}
- else if(a==="search"){msg.textContent="Aranıyor…";geoQuery(geoClean(PIN.c.street||"")).then(function(j){if(j[0]&&PIN){var ll=[+j[0].lat,+j[0].lon];PIN.m.setView(ll,17);PIN.put(L.latLng(ll));msg.textContent="Bulundu. Doğru değilse evin üstüne dokunun, sonra Kaydet."}else msg.textContent="Adres bulunamadı; haritada kendiniz işaretleyin."},function(){msg.textContent="Arama yapılamadı."})}
+ else if(a==="save"){var ll=PIN.get();if(!ll){msg.textContent="Önce haritada bir yere dokunun.";return}setCustPos(PIN.c,{lat:ll.lat,lng:ll.lng},true);var nm=PIN.c.name;closePin();save();softRender();toast(nm+": konum kaydedildi.")}
+ else if(a==="search"){msg.textContent="Aranıyor…";geoFind(addrParts(PIN.c)).then(function(r){if(!PIN)return;if(r){var ll=[r.lat,r.lng];PIN.m.setView(ll,r.lv==="mahalle"?15:17);PIN.put(L.latLng(ll));msg.textContent=r.lv==="kapi"?"Kapı numarasıyla bulundu. Kontrol edip Kaydet deyin.":r.lv==="sokak"?"Sokak bulundu (kapı numarası haritada yok). Evin üstüne dokunup Kaydet deyin.":"Sadece mahalle bulundu. Evin üstüne dokunup Kaydet deyin."}else msg.textContent="Adres bulunamadı; haritada kendiniz işaretleyin."},function(){msg.textContent="Arama yapılamadı."})}
  else if(a==="gps"){if(!navigator.geolocation){msg.textContent="Konum desteklenmiyor.";return}msg.textContent="Konum alınıyor…";navigator.geolocation.getCurrentPosition(function(p){if(!PIN)return;var ll=[p.coords.latitude,p.coords.longitude];PIN.m.setView(ll,18);PIN.put(L.latLng(ll));msg.textContent="Bulunduğunuz yer işaretlendi. Kaydet'e basın."},function(){msg.textContent="Konum alınamadı; konum iznini açın."},{enableHighAccuracy:true,timeout:15000})}});
 /* bölge haritası */
 var ZMAP=null,ZVIEW=null,ZDRAW=null;
@@ -2817,6 +2847,8 @@ document.addEventListener("click",function(e){
   case "start-order":scrollToProducts();break;
   case "goto":if(custScreen!=="shop"){custScreen="shop";render()}var tg=document.getElementById(id);if(tg){var tb2=document.querySelector(".topbar"),off=(tb2?tb2.offsetHeight:0)+12;window.scrollTo({top:tg.getBoundingClientRect().top+window.scrollY-off,behavior:"smooth"})}break;
   case "w-cancel":webCancel(id);break;
+  case "addr-find":var dd=S.draft,mmg=document.getElementById("addr-find-msg"),mhn=dd.mah&&dd.mah!=="__yok"?dd.mah:"";if(!dd.street&&!mhn){if(mmg)mmg.textContent="Önce mahalle ve sokağınızı yazın.";break}if(mmg)mmg.textContent="Aranıyor…";
+   var zz=zoneBy(dd.zone),il=(zz&&zz.ilce)||"";geoFind({road:dd.street||"",no:String(dd.bina||"").replace(/\D/g,""),mah:mhn,ilce:il}).then(function(r){var m2=document.getElementById("addr-find-msg");if(!r){if(m2)m2.textContent="Adresiniz haritada bulunamadı. Lütfen haritada evinizin üstüne dokunun.";return}S.draft.lat=+r.lat.toFixed(6);S.draft.lng=+r.lng.toFixed(6);S.draft.pinZoom=r.lv==="mahalle"?15:17;autoZone();rerenderForm();var m3=document.getElementById("addr-find-msg");if(m3)m3.textContent=r.lv==="kapi"?"Kapınız bulundu. İşaret doğru yerde mi bakın.":r.lv==="sokak"?"Sokağınız bulundu. Lütfen haritada tam olarak binanızın üstüne dokunun.":"Mahalleniz bulundu. Lütfen haritada binanızın üstüne dokunun."},function(){var m2=document.getElementById("addr-find-msg");if(m2)m2.textContent="Arama yapılamadı. Haritada evinizin üstüne dokunun."});break;
   case "account":custScreen="account";S.acct.tab="menu";render();window.scrollTo(0,0);break;
   case "acc-tab":S.acct.tab=id;render();window.scrollTo(0,0);break;
   case "cart-open":S.draft.sheet={t:"cart"};updateCart();break;
@@ -2854,11 +2886,11 @@ document.addEventListener("click",function(e){
   case "rm-photo":S.products[+id].photo="";render();break;
   case "rm-cust":S.customers=S.customers.filter(function(c){return c.id!==id});render();break;
   case "archive":S.customers=S.customers.filter(function(c){return c.id!==id});render();toast("Müşteri arşive kaldırıldı.");break;
-  case "save-pos":var op3=byId(id),cp3=op3&&custOf(op3);if(!op3)break;if(!navigator.geolocation){toast("Bu telefonda konum alınamıyor.");break}toast("Konum alınıyor…");navigator.geolocation.getCurrentPosition(function(pp){var la=pp.coords.latitude,lo=pp.coords.longitude;op3.lat=la;op3.lng=lo;if(cp3){cp3.lat=la;cp3.lng=lo;cp3.noPos=false}S.orders.forEach(function(o4){if(o4.cid===op3.cid&&o4.status==="bekliyor"){o4.lat=la;o4.lng=lo}});save();render();toast("Konum kaydedildi.")},function(){toast("Konum alınamadı. Telefonun konum izni açık olmalı.")},{enableHighAccuracy:true,timeout:15000});break;
+  case "save-pos":var op3=byId(id),cp3=op3&&custOf(op3);if(!op3)break;if(!navigator.geolocation){toast("Bu telefonda konum alınamıyor.");break}toast("Konum alınıyor…");navigator.geolocation.getCurrentPosition(function(pp){var la=pp.coords.latitude,lo=pp.coords.longitude;op3.lat=la;op3.lng=lo;if(cp3){setCustPos(cp3,{lat:la,lng:lo},true)}S.orders.forEach(function(o4){if(o4.cid===op3.cid&&o4.status==="bekliyor"){o4.lat=la;o4.lng=lo}});save();render();toast("Konum kaydedildi.")},function(){toast("Konum alınamadı. Telefonun konum izni açık olmalı.")},{enableHighAccuracy:true,timeout:15000});break;
   case "staff-rm":if(ROLE==="owner"&&confirm("Bu kişinin erişimi kaldırılsın mı?"))DB.doc("access/staff").set({emails:firebase.firestore.FieldValue.arrayRemove(id)},{merge:true}).then(function(){toast("Erişim kaldırıldı.")});break;
   case "chg-seen":var cg=S.customers.filter(function(x){return x.id===id})[0];if(cg&&cg.changed){cg.changed.seen=true;softRender()}break;
   case "pin-open":openPin(id);break;
-  case "geo-run":geoRun();break;
+  case "geo-run":geoRun(id);break;
   case "poly-start":S.draft.drawing=true;S.draft.poly=[];softRender();break;
   case "poly-undo":(S.draft.poly||[]).pop();softRender();break;
   case "poly-cancel":S.draft.drawing=false;S.draft.poly=[];softRender();break;
@@ -2978,7 +3010,7 @@ document.addEventListener("input",function(e){
   return}
  if(t.id==="mah-search"){S.draft.mahq=t.value;var mp4=t.selectionStart;render();var ms4=document.getElementById("mah-search");if(ms4){ms4.focus();try{ms4.setSelectionRange(mp4,mp4)}catch(e){}}return}
  if(t.id==="pos-search"){S.draft.possearch=t.value;var pp4=t.selectionStart;render();var ps4=document.getElementById("pos-search");if(ps4){ps4.focus();try{ps4.setSelectionRange(pp4,pp4)}catch(e){}}return}
- if(t.dataset.poscid){var pv5=posFromText(t.value);if(pv5&&pv5!=="short"){var c5=S.customers.filter(function(x){return x.id===t.dataset.poscid})[0];if(c5){setCustPos(c5,pv5);save();toast(c5.name+": konum kaydedildi.");var y20=window.scrollY;setTimeout(function(){render();window.scrollTo(0,y20)},250)}}else if(pv5==="short")toast("Kısa bağlantıdan konum okunamıyor. Haritada koordinatları kopyalayıp yapıştırın.");return}
+ if(t.dataset.poscid){var pv5=posFromText(t.value);if(pv5&&pv5!=="short"){var c5=S.customers.filter(function(x){return x.id===t.dataset.poscid})[0];if(c5){setCustPos(c5,pv5,true);save();toast(c5.name+": konum kaydedildi.");var y20=window.scrollY;setTimeout(function(){render();window.scrollTo(0,y20)},250)}}else if(pv5==="short")toast("Kısa bağlantıdan konum okunamıyor. Haritada koordinatları kopyalayıp yapıştırın.");return}
  if(t.id==="hv-search"){S.draft.hvsearch=t.value;var hp2=t.selectionStart;render();var hs=document.getElementById("hv-search");if(hs){hs.focus();try{hs.setSelectionRange(hp2,hp2)}catch(e){}}return}
  if(t.id==="d-search"){S.draft.dsearch=t.value;var pos=t.selectionStart;render();var ds=document.getElementById("d-search");if(ds){ds.focus();try{ds.setSelectionRange(pos,pos)}catch(e){}}return}
  if(t.dataset.look&&t.dataset.look.indexOf("bg")===0&&t.type==="range"){S.theme.draft[t.dataset.look]=+t.value;var lb=document.getElementById("bgv-"+t.dataset.look);if(lb)lb.textContent=t.dataset.unit==="%"?"%"+t.value:t.value+t.dataset.unit;applyBg();return}
