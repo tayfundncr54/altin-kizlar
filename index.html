@@ -920,6 +920,12 @@ body.crewonly .views a:not([data-view="personel"]){display:none!important}
 body.crewonly .clock,body.crewonly .views a[data-view="musteri"]{display:none!important}
 .lpick{height:300px;border-radius:12px;border:1.5px solid var(--s-line);overflow:hidden}
 .webord{gap:8px}
+
+.tmap{height:360px;border-radius:12px;border:1px solid var(--line);overflow:hidden}
+.tm-n{background:#3a2a1e;color:#fff;border-radius:50%;display:grid!important;place-items:center;font:700 12px/1 system-ui;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.tm-n.done{background:#2f7d4f}.tm-n.cur{background:#b0412e;transform:scale(1.2)}
+.tm-farm,.tm-truck{font-size:22px;line-height:26px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}
+.mvb{display:inline-flex;gap:2px;margin-right:6px}.mvb .btn{padding:2px 7px;min-height:0;font-size:11px}
 </style>
 
 </head>
@@ -1258,7 +1264,7 @@ function startBeta(){if(!BETA)return;var ov=document.getElementById("beta-load")
  var to=setTimeout(function(){if(!dbReady){syncNote("Kayıtlara ulaşılamıyor. İnternet bağlantınızı kontrol edin.",true);if(ov)ov.querySelector("p").textContent="Kayıtlara ulaşılamıyor. İnternet bağlantınızı kontrol edin; sayfa bağlanınca kendiliğinden açılır."}},10000);
  (function(db){DB=db;var gotState=false,gotC=false,gotO=false;
   db.collection("media").onSnapshot(function(sn){sn.docChanges().forEach(function(c){if(c.type==="removed")delete MEDIA[c.doc.id];else MEDIA[c.doc.id]=(c.doc.data()||{}).d||""});if(dbReady){softRender();applyBg()}},function(){});
-  function ready(){if(dbReady||!(gotState&&gotC&&gotO))return;clearTimeout(to);dbReady=true;startStaffDoc();if(ROLE!=="crew")startWebInbox();if(ov)ov.remove();ensureExtras();realClock();softRender();syncNote("✓ Kayıtlar güncel");flush()}
+  function ready(){if(dbReady||!(gotState&&gotC&&gotO))return;clearTimeout(to);dbReady=true;startStaffDoc();if(ROLE!=="crew"){startWebInbox();db.collection("live").onSnapshot(function(sn){LIVE={};sn.docs.forEach(function(d){LIVE[d.id]=d.data()});if(TMAP)truckMark();else if(view==="yonetici")softRender()},function(){})}var uu=firebase.auth().currentUser;if(uu)AUTHUID=uu.uid;liveSync();if(ov)ov.remove();ensureExtras();realClock();softRender();syncNote("✓ Kayıtlar güncel");flush()}
   db.doc("app/state").onSnapshot(function(d){if(d.metadata.fromCache&&!gotState)return;if(d.metadata.hasPendingWrites)return;
    if(!d.exists){gotState=true;synced.state="";ready();return}var body=d.data(),j=JSON.stringify(body);if(j!==synced.state){var loc=JSON.stringify(sharedState());if(!dbReady||loc===synced.state||!synced.state){Object.keys(body).forEach(function(k){S[k]=JSON.parse(JSON.stringify(body[k]))});synced.state=j;if(dbReady)softRender()}}gotState=true;ready()},function(e){dbErr=e.code;var ov2=document.getElementById("beta-load");if(e.code==="permission-denied"&&ov2){document.getElementById("lg-msg").textContent="Bu hesabın kayıtlara erişim izni yok. Yöneticiye başvurun.";}syncNote("Ayarlar okunamadı ("+e.code+")",true)});
   db.collection("customers").onSnapshot(function(sn){if(!gotC&&!sn.size&&sn.metadata.fromCache)return;if(!gotC){S.customers=[];synced.c={}}var ch=applyColl(sn,S.customers,"c");gotC=true;if(dbReady&&ch)softRender();ready()},function(e){syncNote("Kişiler okunamadı ("+e.code+")",true)});
@@ -1342,15 +1348,21 @@ function zoomBox(p,span){var c=px(p),w=span,h=span*MH/MW*0.8;return[Math.max(0,M
 
 /* ---------- Rota ---------- */
 function todayOrders(){return S.orders.filter(function(o){return o.abs===S.demo.abs&&o.status!=="iptal"})}
+function posOf(o){var c=custOf(o);if(c&&c.lat&&!c.noPos)return {lat:+c.lat,lng:+c.lng,ok:!c.geoApprox};if(o.lat)return {lat:+o.lat,lng:+o.lng,ok:false};return null}
+function bestOrder(list,start){var P=list.filter(function(o){return posOf(o)}),N=list.filter(function(o){return !posOf(o)}),cur=start,out=[],left=P.slice();
+ while(left.length){left.sort(function(x,y){return dist(cur,posOf(x))-dist(cur,posOf(y))});var n=left.shift();out.push(n);cur=posOf(n)}
+ function len(r){var t=0,c=start;r.forEach(function(o){var q=posOf(o);t+=dist(c,q);c=q});return t}
+ var imp=true,guard=0;while(imp&&guard++<60){imp=false;for(var i=0;i<out.length-1;i++)for(var k=i+1;k<out.length;k++){var r2=out.slice(0,i).concat(out.slice(i,k+1).reverse(),out.slice(k+1));if(len(r2)+1e-6<len(out)){out=r2;imp=true}}}
+ return out.concat(N)}
 function getRoute(){
  var a=S.demo.abs,ids=todayOrders().map(function(o){return o.id});
  var r=S.routes[a];
  if(r){r=r.filter(function(id){return ids.indexOf(id)>=0});ids.forEach(function(id){if(r.indexOf(id)<0)r.push(id)});S.routes[a]=r;return r}
- // en yakın komşu
- var left=todayOrders().slice(),cur=S.settings.farm,out=[];
- while(left.length){left.sort(function(x,y){return dist(cur,x)-dist(cur,y)});var n=left.shift();out.push(n.id);cur=n}
- S.routes[a]=out;return out;
+ S.routes[a]=bestOrder(todayOrders(),S.settings.farm).map(function(o){return o.id});return S.routes[a];
 }
+function reRoute(from){var a=S.demo.abs,r=getRoute().map(byId).filter(Boolean),done=r.filter(function(o){return o.status==="teslim"}),rest=r.filter(function(o){return o.status!=="teslim"});
+ var last=done[done.length-1],st=from||(last&&posOf(last))||S.settings.farm;S.routes[a]=done.concat(bestOrder(rest,st)).map(function(o){return o.id})}
+function moveStop(id,d){var r=getRoute(),i=r.indexOf(id),j=i+d;if(i<0||j<0||j>=r.length)return;var t=r[i];r[i]=r[j];r[j]=t}
 function byId(id){return S.orders.filter(function(o){return o.id===id})[0]}
 function etas(){
  // kalan teslimatlar için tahmini varış (dk)
@@ -1369,7 +1381,7 @@ var rendering=false;
 function render(){
  if(rendering){setTimeout(render,0);return}
  rendering=true;try{renderNow()}finally{rendering=false}
- try{mountMaps()}catch(e){}
+ try{mountMaps()}catch(e){}try{if(BETA)liveSync()}catch(e){}
 }
 function renderNow(){
  setTimeout(applyBg,0);
@@ -1958,27 +1970,36 @@ function orderRows(list,actions){
   return '<tr'+(o.status==="iptal"?' class="off"':'')+'><td class="n">'+o.no+'</td><td><b>'+esc(o.name)+'</b>'+(o.sub?' <span class="chip c-info">Abone</span>':'')+(o.fromSurplus?' <span class="chip c-ok">Fazla üründen</span>':'')+'<div class="note num">'+esc(o.phone)+'</div>'+(o.note?'<span class="chip c-warn">'+esc(o.note)+'</span>':'')+'</td><td>'+esc(o.zone)+'<div class="note">'+esc(o.street)+' No '+esc(o.bina)+' D '+esc(o.daire)+'</div></td>'+P.map(function(p){return qcell(o.items[p.id]||0)}).join("")+'<td class="n"><b>'+tl(o.total)+'</b></td><td>'+(o.pay==="havale"?"Havale":"Kapıda")+(o.paid?' <span class="chip c-ok">Ödendi</span>':(o.pay==="havale"?' <span class="chip c-warn">Bekleniyor</span>':''))+'</td><td>'+statusChip(o)+(o.lateCancel?'<div class="note">'+esc(o.lateReason||"")+'</div>':'')+'</td>'+(actions?'<td>'+(o.status==="bekliyor"?'<button class="btn danger small" data-act="admin-cancel" data-id="'+o.id+'">İptal</button>':'')+'</td>':'')+'</tr>'}).join("")+'</tbody><tfoot><tr><td></td><td colspan="2">Toplam · '+live.length+' sipariş</td>'+P.map(function(p){return qcell(q[p.id]||0)}).join("")+'<td class="n">'+tl(tot)+'</td><td colspan="'+(actions?3:2)+'"></td></tr></tfoot></table></div>';
 }
 function itemsShort(items){var L={milk3:"3 lt süt",milk5:"5 lt süt",butter:"tereyağı",cheese:"peynir",egg15:"15'li yumurta",egg30:"30'lu yumurta"},a=[];S.products.forEach(function(p){var q=items[p.id];if(q)a.push((L[p.id]||p.name)+": "+q)});return a.join(" · ")}
-function crewPos(){
- var a=S.demo.abs,cw=S.crew[a]||{};if(!cw.started)return null;
- var route=getRoute().map(byId).filter(function(o){return o&&o.status!=="iptal"}),cur=route.filter(function(o){return o.status!=="teslim"})[0];if(!cur)return null;
- var done=route.filter(function(o){return o.status==="teslim"}),last=done[done.length-1],from=last?{lat:last.lat,lng:last.lng}:S.settings.farm,t0=last&&last.deliveredAt!=null?last.deliveredAt:(cw.startedAt||toMin(S.settings.depart));
- var travel=Math.max(3,dist(from,cur)/32*60),f=Math.max(0,Math.min(.9,(S.demo.min-t0)/travel));
- return{lat:from.lat+(cur.lat-from.lat)*f,lng:from.lng+(cur.lng-from.lng)*f,at:S.demo.min,target:cur.id};
-}
+var LIVE={},LW={id:null,last:null,sent:0,err:"",wl:null};
+function liveFresh(){var best=null;Object.keys(LIVE).forEach(function(k){var v=LIVE[k];if(v&&v.at&&Date.now()-v.at<15*60000&&(!best||v.at>best.at))best=v});return best}
+function crewPos(){var v=liveFresh();if(!v)return null;var r=getRoute().map(byId).filter(function(o){return o&&o.status!=="teslim"&&o.status!=="iptal"});return {lat:v.lat,lng:v.lng,at:v.at,target:r[0]?r[0].id:null,live:true}}
+function agoTxt(t){var m=Math.round((Date.now()-t)/60000);return m<1?"az önce":m+" dk önce"}
+function liveStart(){if(LW.id!=null||!navigator.geolocation||!DB||!AUTHUID)return;
+ try{if(navigator.wakeLock)navigator.wakeLock.request("screen").then(function(w){LW.wl=w},function(){})}catch(e){}
+ LW.id=navigator.geolocation.watchPosition(function(p){var c=p.coords,now=Date.now(),pt={lat:+c.latitude.toFixed(6),lng:+c.longitude.toFixed(6)};LW.err="";
+  var moved=LW.last?dist(LW.last,pt)*1000/1.3:999;if(now-LW.sent<20000&&moved<40)return;LW.last=pt;LW.sent=now;
+  var u=firebase.auth().currentUser;DB.doc("live/"+AUTHUID).set({lat:pt.lat,lng:pt.lng,acc:Math.round(c.accuracy||0),at:now,who:(u&&u.email?(crewPhoneOf(u.email)?"0"+fmtPhone(crewPhoneOf(u.email)):"Yönetici"):"")}).catch(function(){});
+  var el=document.getElementById("live-note");if(el)el.textContent="Konumunuz paylaşılıyor ✓ son gönderim "+hm2(now)},
+ function(e){LW.err=e&&e.code===1?"izin":"yok";var el=document.getElementById("live-note");if(el)el.textContent=LW.err==="izin"?"Konum izni verilmedi. Telefonun ayarlarından bu siteye konum izni verin.":"Konum alınamıyor; telefonun konumu (GPS) açık mı?"},{enableHighAccuracy:true,maximumAge:15000,timeout:30000})}
+function liveStop(){if(LW.id!=null){try{navigator.geolocation.clearWatch(LW.id)}catch(e){}LW.id=null}if(LW.wl){try{LW.wl.release()}catch(e){}LW.wl=null}if(DB&&AUTHUID)DB.doc("live/"+AUTHUID).delete().catch(function(){})}
+function hm2(t){var d=new Date(t);return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2)}
+function liveSync(){var cw=S.crew[S.demo.abs]||{},on=view==="personel"&&cw.started&&todayOrders().some(function(o){return o.status!=="teslim"});if(on)liveStart();else if(LW.id!=null)liveStop()}
+document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible"&&LW.id!=null){LW.sent=0}});
 function trackBox(route){
  var cw=S.crew[S.demo.abs]||{},done=route.filter(function(o){return o.status==="teslim"}),cur=route.filter(function(o){return o.status!=="teslim"})[0],et=etas();
  var p=route.length?Math.round(done.length/route.length*100):0,status;
  if(!cw.started)status='<span class="dot"></span> Personel henüz yola çıkmadı.'+(prepItems(route).length?' Araca yüklenen: <b>'+prepItems(route).filter(function(x){return (cw.loaded||{})[x.id]}).length+' / '+prepItems(route).length+'</b> kalem.':'');
- else if(cur)status='<span class="dot live"></span> Yolda · şu an <b>'+esc(cur.name)+'</b> adresine gidiyor ('+esc(cur.zone)+')'+(et[cur.id]?' · yaklaşık <b>'+et[cur.id]+' dk</b>':'')+'<span class="note" style="display:block">Araç konumu canlı · son güncelleme '+hm(S.demo.min)+'</span>';
+ else if(cur){var lv=liveFresh();status='<span class="dot live"></span> Yolda · şu an <b>'+esc(cur.name)+'</b> adresine gidiyor ('+esc(cur.zone)+')'+(et[cur.id]?' · yaklaşık <b>'+et[cur.id]+' dk</b>':'')+'<span class="note" style="display:block">'+(lv?'Araç konumu: '+agoTxt(lv.at)+' güncellendi ('+esc(lv.who||"")+')':'Aracın konumu henüz gelmedi (dağıtıcının telefonunda Personel ekranı açık olmalı).')+'</span>'}
  else status='<span class="dot ok"></span> Dağıtım bitti'+(done.length&&done[done.length-1].deliveredAt?' · son teslimat '+hm(done[done.length-1].deliveredAt):'')+'.';
  var cp=crewPos();
- var mp=mapSVG({route:route.map(function(o){return{lat:o.lat,lng:o.lng,done:o.status==="teslim",current:cw.started&&cur&&o.id===cur.id}}),truck:cp,box:fitBox(route,1.05),label:"Dağıtım haritası"});
+ var mp=window.L?'<div id="tmap" class="tmap"></div>':mapSVG({route:route.map(function(o){return{lat:o.lat,lng:o.lng,done:o.status==="teslim",current:cw.started&&cur&&o.id===cur.id}}),truck:cp,box:fitBox(route,1.05),label:"Dağıtım haritası"});
  var rows=route.map(function(o,i){var isCur=cw.started&&cur&&o.id===cur.id,cls=o.status==="teslim"?"done":(isCur?"cur":"");
   var right=o.status==="teslim"?(o.unpaid&&!o.paid?'<span class="chip c-bad">Ödeme alınamadı</span>':'<span class="chip c-ok">✓ '+(o.deliveredAt?hm(o.deliveredAt):'teslim')+'</span>'):(isCur?'<span class="chip c-bad">Şu an gidiliyor</span>':(cw.started&&et[o.id]?'<span class="note num">~'+et[o.id]+' dk</span>':''));
-  return '<details class="trow-d"><summary class="trow '+cls+'"><span class="tn num">'+(o.status==="teslim"?'✓':i+1)+'</span><span class="tw2"><b>'+esc(o.name)+'</b> <span class="note">· '+esc(o.zone)+'</span><span class="note" style="display:block">'+esc(itemsShort(o.items))+(o.editedAt!=null?' <span class="chip c-info">'+hm(o.editedAt)+'\'de değiştirildi</span>':'')+'</span>'+(o.note&&o.status!=="teslim"?'<span class="chip '+(o.noteNew?'c-bad':'c-warn')+'">'+(o.noteNew?'Yeni not: ':'Not: ')+esc(o.note)+'</span>':'')+'</span>'+right+'</summary>'+
-   '<div class="od"><div>'+esc(o.street)+' · Bina '+esc(o.bina)+' · Daire '+esc(o.daire)+'</div><div class="num">'+esc(o.phone)+'</div><div>'+(o.pay==="havale"?'Havale':'Kapıda nakit')+' · <b class="num">'+tl(o.total)+'</b>'+(o.pay==="kapida"&&o.paid?' · ödeme alındı':'')+(o.sub?' · abone':'')+'</div>'+(o.note?'<div><span class="chip c-warn">'+esc(o.note)+'</span></div>':'')+'</div></details>'}).join("");
+  var mv=o.status==="teslim"?'':'<div class="row" style="gap:6px"><button class="btn ghost small" data-act="rt-mv" data-id="'+o.id+'" data-v="-1">▲ Sırada yukarı al</button><button class="btn ghost small" data-act="rt-mv" data-id="'+o.id+'" data-v="1">▼ Aşağı al</button></div>';
+  return '<details class="trow-d"><summary class="trow '+cls+'"><span class="tn num">'+(o.status==="teslim"?'✓':i+1)+(posOf(o)?'':' <span title="Konumu yok">📍?</span>')+'</span><span class="tw2"><b>'+esc(o.name)+'</b> <span class="note">· '+esc(o.zone)+'</span><span class="note" style="display:block">'+esc(itemsShort(o.items))+(o.editedAt!=null?' <span class="chip c-info">'+hm(o.editedAt)+'\'de değiştirildi</span>':'')+'</span>'+(o.note&&o.status!=="teslim"?'<span class="chip '+(o.noteNew?'c-bad':'c-warn')+'">'+(o.noteNew?'Yeni not: ':'Not: ')+esc(o.note)+'</span>':'')+'</span>'+right+'</summary>'+
+   '<div class="od">'+mv+'<div>'+esc(o.street)+' · Bina '+esc(o.bina)+' · Daire '+esc(o.daire)+'</div><div class="num">'+esc(o.phone)+'</div><div>'+(o.pay==="havale"?'Havale':'Kapıda nakit')+' · <b class="num">'+tl(o.total)+'</b>'+(o.pay==="kapida"&&o.paid?' · ödeme alındı':'')+(o.sub?' · abone':'')+'</div>'+(o.note?'<div><span class="chip c-warn">'+esc(o.note)+'</span></div>':'')+'</div></details>'}).join("");
  return '<div class="box"><div class="row" style="justify-content:space-between"><h2>Bugünün siparişleri ve dağıtım</h2><span class="row"><span class="note">'+(cw.startedAt?'Çıkış: '+hm(cw.startedAt):'')+'</span><button class="btn ghost small" data-act="tab" data-id="siparis">Düzenle / yeni sipariş</button></span></div>'+
-  '<div class="tstatus">'+status+'</div><div class="pbar" role="progressbar" aria-valuenow="'+p+'" aria-valuemin="0" aria-valuemax="100"><i style="width:'+p+'%"></i></div><div class="note num">'+done.length+' / '+route.length+' teslim edildi · %'+p+'</div>'+
+  '<div class="tstatus">'+status+'</div><div class="row" style="gap:8px"><button class="btn small" data-act="rt-calc">↻ Sırayı en kısa yola göre yeniden diz</button><span class="note">Sıra çiftlikten (yola çıkıldıysa son teslim edilen yerden) başlayıp en kısa yolu izleyecek şekilde dizilir. ▲▼ ile elle de değiştirebilirsiniz.</span></div><div class="pbar" role="progressbar" aria-valuenow="'+p+'" aria-valuemin="0" aria-valuemax="100"><i style="width:'+p+'%"></i></div><div class="note num">'+done.length+' / '+route.length+' teslim edildi · %'+p+'</div>'+
   '<div class="cols2" style="gap:14px"><div class="crewmap">'+mp+'</div><div class="tlist">'+rows+'</div></div>'+
   '<p class="note" style="margin:0"><span class="mleg" style="background:#2f7d4f"></span> teslim edildi &nbsp; <span class="mleg" style="background:#1d4ed8"></span> dağıtım aracı &nbsp; <span class="mleg" style="background:#b0412e"></span> şu an gidilen &nbsp; <span class="mleg" style="background:#3a2a1e"></span> sırada. Personel "Teslim edildi"ye bastıkça burası kendiliğinden güncellenir. Ayrıntı için isme dokunun.</p></div>';
 }
@@ -2399,7 +2420,7 @@ function renderCrew(){
  var a=S.demo.abs,list=todayOrders();
  var cw=S.crew[a]=S.crew[a]||{started:false,notified:[]};
  var h='<div class="crew wrap"><div class="ph"><div><h1>'+T("p_title")+'</h1><p>'+(BETA?'Dağıtım':'Mehmet (örnek)')+' · '+dayLabel(a)+'</p></div></div>';
- var locNote='';if(cw.started&&todayOrders().some(function(o){return o.status!=="teslim"}))locNote='<div class="alert c-info" style="font-size:14px"><span class="dot live"></span> Konumunuz paylaşılıyor: yönetici'+((S.settings.custTrack||"all")!=="off"?' ve bugün siparişi olan müşteriler':'')+' aracın yerini görüyor. Dağıtım bitince paylaşım kendiliğinden durur.</div>';
+ var locNote='';if(cw.started&&todayOrders().some(function(o){return o.status!=="teslim"}))locNote='<div class="alert c-info" style="font-size:14px;display:grid;gap:4px"><span><span class="dot live"></span> <b id="live-note">'+(LW.err==="izin"?'Konum izni verilmedi. Telefonun ayarlarından bu siteye konum izni verin.':LW.sent?'Konumunuz paylaşılıyor ✓ son gönderim '+hm2(LW.sent):'Konumunuz paylaşılmaya başlıyor…')+'</b></span><span class="note">Yönetici aracın yerini haritada görüyor. Navigasyona geçtiğinizde paylaşım durur, bu ekrana dönünce devam eder. Dağıtım bitince kendiliğinden kapanır.</span></div>';
  if(!list.length)return h+'<div class="box"><h2>Bugün teslimat yok</h2><p class="sub">'+(BETA?(function(){var nx=S.orders.filter(function(o){return o.abs>a&&o.status==="bekliyor"}).map(function(o){return o.abs}).sort(function(x,y){return x-y})[0];return nx!=null?'Sıradaki teslimat: <b>'+dayLabel(nx)+'</b> ('+S.orders.filter(function(o){return o.abs===nx&&o.status==="bekliyor"}).length+' sipariş). O gün sabah liste burada hazır olur.':'Henüz bekleyen sipariş yok.'})():'Üstteki şeritten Pazartesi, Salı, Perşembe veya Cumartesi\'yi seçin.')+'</p></div></div>';
  var route=getRoute().map(byId).filter(Boolean),et=etas();
  var cur=route.filter(function(o){return o.status!=="teslim"})[0];
@@ -2436,7 +2457,7 @@ function renderCrew(){
    '<div class="handover">Çiftliğe teslim edilecek nakit: <b class="num">'+tl(cs.gotSum)+'</b></div>'+
    (cs.un.length?'<div class="unlist"><b>Ödeme alınamayanlar</b>'+cs.un.map(function(o){return '<div class="row" style="justify-content:space-between"><span>'+esc(o.name)+' <span class="note">· '+esc(o.unpaidReason||"")+'</span></span><b class="num">'+tl(o.total)+'</b></div>'}).join("")+'<span class="note">Yönetici bu listeyi panelde görüyor.</span></div>':'')+'</div>';
  }
- var rc=cashSummary(route);if(cw.started&&!cur)return h+'</div>';h+='<div class="box"><h2>Bugünün listesi ('+done+' / '+route.length+')</h2>'+(rc.got.length||rc.un.length?'<p class="sub" style="margin:0">Toplanan nakit: <b class="num">'+tl(rc.gotSum)+'</b>'+(rc.un.length?' · Alınamayan: <b class="num" style="color:var(--bad)">'+tl(rc.unSum)+'</b>':'')+'</p>':'')+'<div class="upcoming">'+route.map(function(o,i){var e=et[o.id];return '<div class="up'+(o.status==="teslim"?' done':'')+'"><span class="n">'+(o.status==="teslim"?"✓":i+1)+'</span><div style="min-width:0"><b>'+esc(o.name)+'</b><br><span class="note">'+esc(o.zone)+' · Bina '+esc(o.bina)+' D '+esc(o.daire)+'</span>'+(o.note&&o.status!=="teslim"?'<br><span class="chip '+(o.noteNew?'c-bad':'c-warn')+'">'+(o.noteNew?'Yeni not: ':'Not: ')+esc(o.note)+'</span>':'')+'</div><span class="note num">'+(o.status==="teslim"?"Teslim":(o.notified?"Haber verildi":(cw.started&&e?"~"+e+" dk":"")))+'</span></div>'}).join("")+'</div></div>';
+ var rc=cashSummary(route);if(cw.started&&!cur)return h+'</div>';h+='<div class="box"><div class="row" style="justify-content:space-between"><h2>Bugünün listesi ('+done+' / '+route.length+')</h2><button class="btn ghost small" data-act="rt-calc">↻ Bulunduğum yerden en kısa sıra</button></div>'+(rc.got.length||rc.un.length?'<p class="sub" style="margin:0">Toplanan nakit: <b class="num">'+tl(rc.gotSum)+'</b>'+(rc.un.length?' · Alınamayan: <b class="num" style="color:var(--bad)">'+tl(rc.unSum)+'</b>':'')+'</p>':'')+'<div class="upcoming">'+route.map(function(o,i){var e=et[o.id];return '<div class="up'+(o.status==="teslim"?' done':'')+'"><span class="n">'+(o.status==="teslim"?"✓":i+1)+'</span><div style="min-width:0"><b>'+esc(o.name)+'</b><br><span class="note">'+esc(o.zone)+' · Bina '+esc(o.bina)+' D '+esc(o.daire)+'</span>'+(o.note&&o.status!=="teslim"?'<br><span class="chip '+(o.noteNew?'c-bad':'c-warn')+'">'+(o.noteNew?'Yeni not: ':'Not: ')+esc(o.note)+'</span>':'')+'</div><span class="note num">'+(o.status==="teslim"?"Teslim":(o.notified?"Haber verildi":(cw.started&&e?"~"+e+" dk":"")))+'</span></div>'}).join("")+'</div></div>';
  return h+'</div>';
 }
 
@@ -2773,7 +2794,16 @@ function addrFindRun(force){var d=S.draft,key=addrKey(),mhn=d.mah&&d.mah!=="__yo
   else{if(d.pinSrc&&d.pinSrc.indexOf("oto")===0||d.pinSrc==="elle"){d.lat=null;d.lng=null;d.pinSrc=""}var v=r?{lat:r.lat,lng:r.lng,z:16}:(zz?{lat:zz.lat,lng:zz.lng,z:15}:null);d.view=v;pickClear(v);
    setFindMsg(String(d.street||"").trim()?"Sokağınız haritada kayıtlı değil. Harita mahallenizi gösteriyor; lütfen binanızın üstüne dokunun.":"Harita mahallenizi gösteriyor. Sokağınızı ve bina numaranızı yazın veya binanızın üstüne dokunun.")}
   save()},function(){if(tok!==AF.tok)return;setFindMsg("Adres aranamadı. Lütfen haritada binanızın üstüne dokunun.")})}
-function mountMaps(){mountPick();var el=document.getElementById("zmap");if(ZMAP){try{ZVIEW={c:ZMAP.getCenter(),z:ZMAP.getZoom()};ZMAP.remove()}catch(e){}ZMAP=null;ZDRAW=null}if(!el||!window.L)return;
+var TMAP=null,TMK=null,TV=null;
+function truckMark(){if(!TMAP)return;var lv=liveFresh();if(TMK){try{TMK.remove()}catch(e){}TMK=null}if(lv)TMK=L.marker([lv.lat,lv.lng],{icon:L.divIcon({className:"tm-truck",html:"🚚",iconSize:[30,30]}),zIndexOffset:1000}).addTo(TMAP).bindTooltip("Dağıtım aracı · "+agoTxt(lv.at))}
+function mountTrack(){var el=document.getElementById("tmap");if(TMAP){try{TV={c:TMAP.getCenter(),z:TMAP.getZoom(),a:S.demo.abs}}catch(e){}try{TMAP.remove()}catch(e){}TMAP=null;TMK=null}if(!el||!window.L)return;var route=getRoute().map(byId).filter(Boolean),cw=S.crew[S.demo.abs]||{},cur=route.filter(function(o){return o.status!=="teslim"})[0],pts=[];
+ TMAP=L.map(el);tiles(TMAP);var f=S.settings.farm;if(f&&f.lat){L.marker([f.lat,f.lng],{icon:L.divIcon({className:"tm-farm",html:"🏠",iconSize:[26,26]})}).addTo(TMAP).bindTooltip("Çiftlik");pts.push([f.lat,f.lng])}
+ var line=[];if(f&&f.lat)line.push([f.lat,f.lng]);
+ route.forEach(function(o,i){var q=posOf(o);if(!q)return;var cls=o.status==="teslim"?"done":(cw.started&&cur&&o.id===cur.id?"cur":"");L.marker([q.lat,q.lng],{icon:L.divIcon({className:"tm-n "+cls,html:o.status==="teslim"?"✓":String(i+1),iconSize:[26,26]})}).addTo(TMAP).bindTooltip((i+1)+". "+o.name+(q.ok?"":" (yaklaşık konum)"));pts.push([q.lat,q.lng]);line.push([q.lat,q.lng])});
+ if(line.length>1)L.polyline(line,{color:"#3a2a1e",weight:2,opacity:.45,dashArray:"5 6"}).addTo(TMAP);
+ var lv=liveFresh();truckMark();if(lv)pts.push([lv.lat,lv.lng]);
+ if(TV&&TV.a===S.demo.abs)TMAP.setView(TV.c,TV.z);else if(pts.length>1)TMAP.fitBounds(pts,{padding:[24,24]});else if(pts.length)TMAP.setView(pts[0],13);else TMAP.setView([40.77,30.40],11);setTimeout(function(){if(TMAP)TMAP.invalidateSize()},60)}
+function mountMaps(){mountPick();mountTrack();var el=document.getElementById("zmap");if(ZMAP){try{ZVIEW={c:ZMAP.getCenter(),z:ZMAP.getZoom()};ZMAP.remove()}catch(e){}ZMAP=null;ZDRAW=null}if(!el||!window.L)return;
  ZMAP=L.map(el,{preferCanvas:true}).setView(ZVIEW?ZVIEW.c:[40.77,30.40],ZVIEW?ZVIEW.z:11);tiles(ZMAP);
  Object.keys(S.zonePoly||{}).forEach(function(z){if(zoneBy(z))L.polygon(S.zonePoly[z],{color:zColor(z),weight:2,fillOpacity:.15}).addTo(ZMAP).bindTooltip(z,{sticky:true})});
  S.customers.forEach(function(c){if(c.noPos||c.lat==null)return;L.circleMarker([c.lat,c.lng],{radius:c.geoApprox?4:6,color:"#fff",weight:1,fillColor:zColor(c.zone),fillOpacity:c.geoApprox?.6:.95}).addTo(ZMAP).bindTooltip(esc(c.name)+" · "+esc(c.zone)+(c.geoApprox?" (yaklaşık)":""))});
@@ -2960,7 +2990,7 @@ document.addEventListener("click",function(e){
   case "look-undo":var pv=S.theme.prev;S.theme.prev=S.theme.pub;if(pv)S.theme.pub=pv;if(S.theme.prevText){var cur=clone(S.pubText);S.pubText=clone(S.theme.prevText);S.theme.prevText=cur;var pt2=clone(S.pubText);S.texts=pt2.texts||{};S.tstyle=pt2.tstyle||{};S.layout=pt2.layout||{}}S.theme.draft=null;render();toast("Önceki görünüme dönüldü.");break;
   case "farm-save":var fl=parseLinks(document.getElementById("farm-link").value)[0];if(fl){S.settings.farm=fl;S.routes={};toast("Çiftlik konumu kaydedildi.")}else toast("Bağlantıda konum bulunamadı.");render();break;
   case "load":var cwl=S.crew[S.demo.abs];cwl.loaded=cwl.loaded||{};cwl.loaded[id]=!cwl.loaded[id];var sy15=window.scrollY;render();window.scrollTo(0,sy15);break;
-  case "crew-start":S.crew[S.demo.abs].started=true;S.crew[S.demo.abs].startedAt=Math.max(S.demo.min,toMin(S.settings.depart));if(S.demo.min<toMin(S.settings.depart)){S.demo.min=toMin(S.settings.depart);fillClock()}render();break;
+  case "crew-start":S.crew[S.demo.abs].started=true;S.crew[S.demo.abs].startedAt=BETA?S.demo.min:Math.max(S.demo.min,toMin(S.settings.depart));if(!BETA&&S.demo.min<toMin(S.settings.depart)){S.demo.min=toMin(S.settings.depart);fillClock()}render();liveSync();break;
   case "notify-skip":todayOrders().forEach(function(o){var e2=etas()[o.id];if(o.status!=="teslim"&&!o.notified&&e2<=S.settings.notifyWin)o.skipNotify=true});S.crew[S.demo.abs].atStop=false;render();break;
   case "deliver":var od=byId(id);var undoSnap={id:id,o:JSON.parse(JSON.stringify(od)),crew:JSON.parse(JSON.stringify(S.crew[S.demo.abs]||{})),min:S.demo.min,cl:(S.customers.filter(function(c){return c.id===od.cid})[0]||{}).lastDaysAgo};
    var pv=el.dataset.v;if(pv==="nakit"){if(od.pay==="havale")od.hvSwitched=true;od.pay="kapida";od.paid=true}else if(pv==="havale"){if(od.pay==="kapida")od.crewHv=true;od.pay="havale";od.paid=false}else if(od.pay==="kapida")od.paid=true;
@@ -2979,6 +3009,8 @@ document.addEventListener("click",function(e){
   case "debt-pay":var am=+(document.getElementById("dp-amt")||{}).value,mt=(document.getElementById("dp-m")||{}).value;if(!(am>0)){toast("Alınan tutarı yazın.");break}var used=payDebt(id,am,mt);if(!debtOf(id))S.draft.debtSel="";var y6=window.scrollY;render();window.scrollTo(0,y6);toast(tl(used)+" ödeme kaydedildi."+(am>used?" Fazla yazılan "+tl(am-used)+" dikkate alınmadı.":""));break;
   case "crew-debt":var used2=payDebt(id,+el.dataset.v,"nakit");var y7=window.scrollY;render();window.scrollTo(0,y7);toast("Eski borç "+tl(used2)+" alındı.");break;
   case "paid-mark":var op=byId(id);if(op){payDebt(op.cid||op.phone,0,"nakit");var r9=debtLeft(op);op.paidPart=op.total;op.paid=true;op.paidLater=S.demo.min;S.payments.push({id:uid(),key:op.cid||op.phone,name:op.name,amt:r9,method:"nakit",abs:S.demo.abs,min:S.demo.min})}var sy21=window.scrollY;render();window.scrollTo(0,sy21);toast("Ödendi olarak işaretlendi.");break;
+  case "rt-mv":moveStop(id,+el.dataset.v);var y31=window.scrollY;render();window.scrollTo(0,y31);break;
+  case "rt-calc":var lvp=view==="personel"&&LW.last?LW.last:null;reRoute(lvp);var y32=window.scrollY;render();window.scrollTo(0,y32);toast("Sıra en kısa yola göre yeniden dizildi.");break;
   case "later":var rt=getRoute(),i2=rt.indexOf(id);rt.splice(i2,1);rt.push(id);render();toast("Adres listenin sonuna alındı.");break;
  }
 });
