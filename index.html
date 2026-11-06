@@ -900,7 +900,7 @@ body.has-bg .site .info-tabs{background:transparent}
 
 .lgbox{display:grid;gap:10px;width:min(360px,100%);text-align:center}
 .lgbox>b{font-size:26px;color:#0b4d2a}.lgsub{color:var(--muted);font-size:13px;letter-spacing:2px;text-transform:uppercase;margin-top:-8px}
-#lg-form{display:grid;gap:10px;text-align:left}#lg-form label{display:grid;gap:4px;font-weight:700;font-size:14px}
+#lg-form{display:grid;gap:10px;text-align:left}#lg-form[hidden]{display:none!important}#lg-form label{display:grid;gap:4px;font-weight:700;font-size:14px}
 #lg-form input{font:inherit;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg)}
 #lg-form button[type=submit]{font:inherit;font-weight:800;background:#0b4d2a;color:#fff;border:0;border-radius:10px;padding:13px}
 .lglink{background:none;border:0;color:var(--muted);text-decoration:underline;font:inherit;cursor:pointer;font-size:13px}
@@ -957,7 +957,7 @@ body.has-bg[data-view="musteri"] .foot2{background:color-mix(in srgb,var(--s-sur
   <p class="demo-note">BETA · Gerçek kayıtlar: yaptığınız her değişiklik kalıcıdır; giriş yapan herkes (siz ve eklediğiniz personel) aynı bilgileri görür. <button type="button" id="lg-out" class="lglink" style="color:inherit">Çıkış yap</button></p><p hidden> Gün ve saati değiştirerek sistemin nasıl davrandığını deneyebilirsiniz. Gerçek sürümde bu üç ekran ayrı adreslerde ve şifreyle açılır.</p>
 </div>
 <div id="beta-load" class="betaload"><div class="lgbox"><b>Altın Kızlar</b><span class="lgsub">Jersey Süt Çiftliği · Yönetim</span><p id="lg-msg">Bağlanıyor…</p>
-<form id="lg-form" hidden><label>E-posta veya telefon numarası<input id="lg-mail" type="text" autocomplete="username" required placeholder="ör. 532 111 22 33"></label><label>Şifre<input id="lg-pass" type="password" autocomplete="current-password" required></label><button type="submit">Giriş yap</button><button type="button" id="lg-forgot" class="lglink">Şifremi unuttum</button></form></div></div>
+<form id="lg-form" hidden><label>E-posta veya telefon numarası<input id="lg-mail" type="text" autocomplete="username" required placeholder="ör. 532 111 22 33"></label><label>Şifre<input id="lg-pass" type="password" autocomplete="current-password" required></label><button type="submit">Giriş yap</button><button type="button" id="lg-forgot" class="lglink">Şifremi unuttum</button></form></div></div><script>(function(){if(!/^#(yonetici|personel)/.test(location.hash||"")){var b=document.querySelector("#beta-load .lgsub");if(b)b.textContent="Jersey Süt Çiftliği";var m=document.getElementById("lg-msg");if(m)m.textContent="Yükleniyor…"}})()</script>
 <div id="bgfix" aria-hidden="true" hidden><div id="bgimg"></div><div id="bgov"></div></div>
 <main id="app" lang="tr"></main>
 <div id="toast" class="toast" hidden></div>
